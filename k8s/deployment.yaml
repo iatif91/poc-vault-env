@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app1-dev
+  namespace: ns1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app1-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app1-dev
+    spec:
+      serviceAccountName: app-1-dev
+      containers:
+      - name: poc-vault-denied-role
+        image: iatif/poc-vault-env
+        args:
+        - sh
+        - -c
+        - "echo $IBM_ACCESS_KEY && && rm /vault/vault-env && echo going to sleep... && sleep 10000"
+        command:
+        - /vault/vault-env
+        env:
+          - name: VAULT_ADDR
+            value: http://vault.vault-infra:8200
+          - name: VAULT_SKIP_VERIFY
+            value: "true"
+          - name: VAULT_AUTH_METHOD
+            value: jwt
+          - name: VAULT_PATH
+            value: k8s
+          # Requesting another application role > expecting the vault authentication to fail
+          - name: VAULT_ROLE
+            value: app-1-staging
+          - name: VAULT_IGNORE_MISSING_SECRETS
+            value: "false"
+          - name: VAULT_ENV_PASSTHROUGH
+          - name: VAULT_JSON_LOG
+            value: "false"
+          - name: VAULT_CLIENT_TIMEOUT
+            value: 10s
+          - name: VAULT_LOG_LEVEL
+            value: debug
+          - name: IBM_ACCESS_KEY
+            value: vault:secret/data/app-1/dev/ibm-cloud#IBM_ACCESS_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app2-dev
+  namespace: ns2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app2-dev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app2-dev
+    spec:
+      serviceAccountName: app-2-dev
+      containers:
+      - name: poc-vault-denied-policy
+        image: iatif/poc-vault-env
+        args:
+        - sh
+        - -c
+        - "echo $IBM_ACCESS_KEY && && rm /vault/vault-env && echo going to sleep... && sleep 10000"
+        command:
+        - /vault/vault-env
+        env:
+        - name: VAULT_ADDR
+          value: http://vault.vault-infra:8200
+        - name: VAULT_SKIP_VERIFY
+          value: "true"
+        - name: VAULT_AUTH_METHOD
+          value: jwt
+        - name: VAULT_PATH
+          value: k8s
+        - name: VAULT_ROLE
+          value: app-2-dev
+        - name: VAULT_IGNORE_MISSING_SECRETS
+          value: "false"
+        - name: VAULT_ENV_PASSTHROUGH
+        - name: VAULT_JSON_LOG
+          value: "false"
+        - name: VAULT_CLIENT_TIMEOUT
+          value: 10s
+        - name: VAULT_LOG_LEVEL
+          value: debug
+        # Requesting another application secret > expect fetching the secret to fail for policy reasons
+        - name: IBM_ACCESS_KEY
+          value: vault:secret/data/app-1/dev/ibm-cloud#IBM_ACCESS_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app1-staging
+  namespace: ns3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app1-staging
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app1-staging
+    spec:
+      serviceAccountName: app-1-staging
+      containers:
+      - name: alpine
+        image: iatif/poc-vault-env
+        args:
+        - sh
+        - -c
+        - "printenv \
+            && echo $NGINX_CERTIFICATE > /tmp/cert.pem && unset NGINX_CERTIFICATE \
+            && echo $NGINX_PRIVATE_KEY > /tmp/key.pem && unset NGINX_PRIVATE_KEY \
+            && rm /vault/vault-env \
+            && echo going to sleep... && sleep 10000"
+        command:
+        - /vault/vault-env
+        env:
+          - name: VAULT_ADDR
+            value: http://vault.vault-infra:8200
+          - name: VAULT_SKIP_VERIFY
+            value: "true"
+          - name: VAULT_AUTH_METHOD
+            value: jwt
+          - name: VAULT_PATH
+            value: k8s
+          - name: VAULT_ROLE
+            value: app-1-staging
+          - name: VAULT_IGNORE_MISSING_SECRETS
+            value: "false"
+          - name: VAULT_ENV_PASSTHROUGH
+          - name: VAULT_JSON_LOG
+            value: "false"
+          - name: VAULT_CLIENT_TIMEOUT
+            value: 10s
+          - name: VAULT_LOG_LEVEL
+            value: debug
+          - name: IBM_ACCESS_KEY
+            value: vault:secret/data/app-1/staging/ibm-cloud#IBM_ACCESS_KEY
+          - name: NGINX_CERTIFICATE
+            value: vault:secret/data/app-1/staging/nginx-cert#${.certificate | b64dec}
+          - name: NGINX_PRIVATE_KEY
+            value: vault:secret/data/app-1/staging/nginx-cert#${.key | b64dec}
+          - name: NGINX_KEY_PASSCODE
+            value: vault:secret/data/app-1/staging/nginx-cert#key-passcode 
